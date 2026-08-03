@@ -26,30 +26,18 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android platform
-        run: |
-          android {
-    namespace = "com.chl.nfcmi"
-    compileSdk = 36
-
-    defaultConfig {
-        applicationId = "com.chl.nfcmi"
-        minSdk = 23
-        targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
-    }
-}
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "9.5.0"
+          gradle-version: '9.5.0'
 
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
