@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NFC WiFi Direct Share</string>
+    <string name="nfc_service_desc">NFC handshake service</string>
+    <string name="nfc_aid_desc">NFC WiFi Direct session handshake</string>
+</resources>
