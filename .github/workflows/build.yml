@@ -1,18 +1,51 @@
-Starting a Gradle Daemon (subsequent builds will be faster)
+name: Build Debug APK
 
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1785753856208.json
-FAILURE: Build failed with an exception.
+'on':
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
+permissions:
+  contents: read
 
-* What went wrong:
-Configuring project with invalid directory
-  Configuring project ':app' without an existing directory is not allowed. The configured projectDirectory '/home/runner/work/nfcmi/nfcmi/app' does not exist, can't be written to or is not a directory.
-    For more information, please refer to https://docs.gradle.org/9.6.1/userguide/multi_project_builds.html#include_existing_projects_only.
-    Possible solution: Make sure the project directory exists and is writable.
+jobs:
+  build:
+    name: Assemble debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
-* Try:
-> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-BUILD FAILED in 41s
-[Incubating] Problems report is available at: file:///home/runner/work/nfcmi/nfcmi/build/reports/problems/problems-report.html
-Error: Process completed with exit code 1.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: |
+          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Build debug APK
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfcmi-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
