@@ -33,7 +33,18 @@ jobs:
 
       - name: Install Android platform
         run: |
-          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+          android {
+    namespace = "com.chl.nfcmi"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.chl.nfcmi"
+        minSdk = 23
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.1.0"
+    }
+}
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
