@@ -1,146 +1,225 @@
-# NFC WiFi Direct Share
+# nfcmi
 
-一个从零搭建的 Kotlin Android 学习项目：两台 Android 手机通过 NFC 触碰完成握手，再用 WiFi Direct 建立点对点链路传输文本或文件。
+`nfcmi` 是一个 Android 个人学习项目，目标是实现两台 Android 手机触碰后互传文本和文件。
 
-## 技术架构
+项目方案不是 Android Beam，也不是第三方互传库，而是：
 
-本项目采用“轻握手 + 重传输”的设计：
+- NFC 只负责近场触发和交换握手参数。
+- WiFi Direct 负责建立点对点连接。
+- TCP socket 负责真实内容传输。
 
-1. 发送端选择文本或文件。
-2. 发送端创建 WiFi Direct Group Owner，并启动本地 TCP ServerSocket。
-3. 发送端通过 NFC HCE 暴露一段 NDEF 握手消息，里面包含 sessionId、token、WiFi Direct deviceAddress、端口和文件元数据。
-4. 接收端开启 NFC ReaderMode，贴近发送端后读取 NDEF 握手消息。
-5. 接收端根据握手参数连接发送端 WiFi Direct 组。
-6. 接收端通过 TCP socket 接收真实文件内容，并保存到应用专属下载目录。
+> 当前仓库还处于初始化阶段：已经提交 Gradle Wrapper 和根构建配置，但 `app/` Android 模块还没有提交。因此现在的仓库不能直接编译 APK。下面文档描述的是本仓库的目标架构和接下来要落地的实现。
 
-> 重要说明：Android 10/API 29 以后 Android Beam 已废弃，很多新系统和厂商 ROM 上 P2P NDEF Push 不可靠或不可用。因此本项目没有使用 `setNdefPushMessageCallback`、`createNdefMessageCallback`、`onNdefPushComplete` 这类 Beam 路径，而是使用 HCE + ReaderMode 自建 NFC 握手，同时仍然用 `NdefMessage`/`NdefRecord` 作为握手数据格式。
+## 为什么不用 Android Beam
 
-## 文件结构
+Android Beam 从 Android 10/API 29 开始已经废弃，新系统和部分厂商 ROM 上的 P2P NDEF Push 不可靠。
 
-```text
-NfcWifiDirectShare/
-├── settings.gradle.kts
-├── build.gradle.kts
-├── gradle.properties
-├── app/
-│   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       ├── java/com/chen/nfcwifidirectshare/
-│       │   ├── nfc/
-│       │   │   ├── HceHandshakeService.kt
-│       │   │   ├── NfcHandshakeCodec.kt
-│       │   │   ├── NfcPayloadStore.kt
-│       │   │   └── NfcReader.kt
-│       │   ├── transfer/
-│       │   │   ├── FileTransferClient.kt
-│       │   │   ├── FileTransferServer.kt
-│       │   │   ├── IncomingFileWriter.kt
-│       │   │   ├── TransferModels.kt
-│       │   │   └── TransferProtocol.kt
-│       │   ├── ui/
-│       │   │   └── MainActivity.kt
-│       │   └── wifi/
-│       │       └── WifiDirectController.kt
-│       └── res/
-│           ├── values/
-│           │   ├── strings.xml
-│           │   └── styles.xml
-│           └── xml/
-│               └── apdu_service.xml
+本项目后续会使用更底层、可控的 NFC 方案来做握手：
+
+- 发送端：Host Card Emulation，模拟一张只提供握手数据的 NFC 卡。
+- 接收端：ReaderMode，读取发送端暴露的握手数据。
+- 数据格式：`NdefMessage` / `NdefRecord`。
+
+NFC 只传小数据，例如：
+
+- `sessionId`
+- 一次性 `token`
+- WiFi Direct 设备标识
+- TCP 端口
+- 文件名、MIME 类型、大小等元数据
+
+真实文件内容不走 NFC。
+
+## 传输流程
+
+```mermaid
+flowchart TD
+    A["发送端选择文本或文件"] --> B["发送端创建 WiFi Direct 组"]
+    B --> C["发送端启动 TCP Server"]
+    C --> D["NFC 触碰交换握手参数"]
+    D --> E["接收端连接 WiFi Direct"]
+    E --> F["TCP 传输文本或文件"]
+    F --> G["接收端保存并提示完成"]
 ```
 
-## 构建环境
+## 目标功能
 
-- Android Gradle Plugin: `9.3.0`
-- Gradle: 建议 `9.5.0`
-- JDK: `17`
-- compileSdk/targetSdk: `37`
-- minSdk: `23`
+- 发送文本内容。
+- 发送图片或任意文件。
+- NFC 触碰后自动交换会话参数。
+- WiFi Direct 自动建连。
+- 传输进度显示。
+- 接收完成后保存文件并提示用户。
+- 不依赖第三方文件互传 SDK。
 
-如果仓库里还没有 Gradle Wrapper，可以在本机安装 Gradle 后执行：
+## 计划中的项目结构
+
+```text
+nfcmi/
+├── app/
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── java/com/chl/nfcmi/
+│       │   ├── nfc/        # NFC HCE、ReaderMode、NDEF 编解码
+│       │   ├── wifi/       # WiFi Direct 建组、发现、连接
+│       │   ├── transfer/   # TCP 传输协议、发送端、接收端
+│       │   └── ui/         # 简单发送/接收界面
+│       └── res/
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+└── gradle/wrapper/
+```
+
+## 当前仓库状态
+
+已提交：
+
+- Gradle Wrapper
+- `settings.gradle.kts`
+- 根目录 `build.gradle.kts`
+- `gradle.properties`
+- README
+
+待补齐：
+
+- `app/` Android 应用模块
+- `AndroidManifest.xml`
+- NFC 握手代码
+- WiFi Direct 连接代码
+- TCP 文件传输代码
+- UI 页面
+- 真机测试记录
+
+## 开发环境
+
+- Android Studio
+- JDK 17
+- Gradle 9.5.0
+- Android Gradle Plugin 9.3.0
+- Kotlin
+- 两台支持 NFC 和 WiFi Direct 的 Android 真机
+
+当前根构建配置使用：
+
+```kotlin
+plugins {
+    id("com.android.application") version "9.3.0" apply false
+}
+```
+
+## 构建方式
+
+当前仓库还缺少 `app/` 模块，暂时不能直接构建。
+
+待 `app/` 模块补齐后，使用：
 
 ```bash
-gradle wrapper --gradle-version 9.5.0
 ./gradlew :app:assembleDebug
 ```
 
-也可以直接用 Android Studio 打开项目，让 IDE 同步 Gradle。
+或直接使用 Android Studio 打开项目并运行到真机。
 
-## 权限说明
+## Android 权限规划
 
-`AndroidManifest.xml` 已配置：
+后续 `AndroidManifest.xml` 至少需要包含：
 
-- `NFC`
-- `INTERNET`
-- `ACCESS_NETWORK_STATE`
-- `CHANGE_NETWORK_STATE`
-- `ACCESS_WIFI_STATE`
-- `CHANGE_WIFI_STATE`
-- `ACCESS_FINE_LOCATION`
-- `NEARBY_WIFI_DEVICES`
-- Android 旧版外部存储兼容权限
+```xml
+<uses-permission android:name="android.permission.NFC" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
-运行时会请求：
+<uses-feature android:name="android.hardware.nfc" android:required="true" />
+<uses-feature android:name="android.hardware.nfc.hce" android:required="true" />
+<uses-feature android:name="android.hardware.wifi.direct" android:required="true" />
+```
 
-- `ACCESS_FINE_LOCATION`：WiFi Direct 设备发现常见必需项。
-- `NEARBY_WIFI_DEVICES`：Android 13/API 33+ 的附近 WiFi 设备权限。
+说明：
 
-## 运行流程
+- WiFi Direct 设备发现通常需要定位权限。
+- Android 13/API 33+ 需要 `NEARBY_WIFI_DEVICES`。
+- 文件选择建议走系统文件选择器，避免申请过大的存储权限。
 
-发送端：
+## 实现重点
 
-1. 打开 App。
-2. 输入文本并点“发送文本：准备 NFC 握手”，或选择文件后点“发送文件：准备 NFC 握手”。
-3. 等状态显示“发送端已准备好”。
-4. 把手机 NFC 区域贴近接收端。
+### NFC 层
 
-接收端：
+NFC 只做握手，不传文件。
 
-1. 打开 App。
-2. 点“开始接收：打开 NFC 读卡模式”。
-3. 贴近发送端。
-4. 等待 WiFi Direct 连接和 TCP 传输完成。
-5. 文件会保存到应用专属目录：`Android/data/com.chen.nfcwifidirectshare/files/Download/received/`。
+计划实现：
 
-## 需要真机调优的点
+- `HceHandshakeService`
+- `NfcReader`
+- `NfcHandshakeCodec`
+- `NfcPayloadStore`
 
-这些点必须用两台 Android 真机测试，模拟器基本测不了：
+握手数据使用 `NdefMessage` 封装，再通过 HCE/ReaderMode 读取。
 
-- NFC HCE 是否被系统路由到本 App。
-- 两台手机的 NFC 线圈位置和贴近角度。
-- `WifiP2pDevice.deviceAddress` 在目标系统上的可用性。
-- `WifiP2pManager.createGroup()` 是否会被系统策略阻止。
+### WiFi Direct 层
+
+发送端优先作为 Group Owner，接收端作为 Client。
+
+计划处理：
+
+- WiFi Direct 是否启用
+- 当前设备信息
+- Peer discovery
+- Group Owner/Client 角色
+- 连接状态广播
+- 失败重试和系统确认弹窗
+
+### Transfer 层
+
+文件内容通过 TCP socket 传输。
+
+计划协议：
+
+1. 先发送 4 字节 header 长度。
+2. 再发送 JSON header。
+3. 最后发送文本或文件字节流。
+
+header 中包含：
+
+- `sessionId`
+- `token`
+- `payloadKind`
+- `displayName`
+- `mimeType`
+- `sizeBytes`
+
+`token` 用于防止误连设备直接接收数据，但它不是加密。后续如果传敏感文件，需要增加 TLS 或端到端加密。
+
+## 真机测试清单
+
+这个项目必须用两台真机测，模拟器基本没有意义。
+
+需要重点验证：
+
+- 两台手机 NFC 线圈位置是否容易触发。
+- HCE 是否能被系统正确路由到本应用。
+- 接收端 ReaderMode 是否能稳定读取握手数据。
+- WiFi Direct 是否能发现对方设备。
+- 发送端作为 Group Owner 是否稳定。
 - `WifiP2pManager.connect()` 是否弹出系统确认框。
-- Android 13+ 的 `NEARBY_WIFI_DEVICES` 和定位开关组合。
-- 部分厂商 ROM 对 WiFi Direct 后台/前台限制较多，需要实际机型适配。
+- Android 13+ 权限和定位开关是否影响发现。
+- 大文件传输时 App 切后台是否会被系统杀掉。
 
-## 代码模块说明
+## 后续计划
 
-- `nfc/HceHandshakeService.kt`：发送端的 Host Card Emulation 服务，接收 SELECT AID 和分片读取 APDU。
-- `nfc/NfcReader.kt`：接收端 NFC ReaderMode，读取发送端 HCE 服务返回的 NDEF 握手消息。
-- `nfc/NfcHandshakeCodec.kt`：把 `NfcSessionParams` 编码成 `NdefMessage`，以及从 NDEF 解码回参数。
-- `wifi/WifiDirectController.kt`：封装 WiFi Direct 广播、建组、发现、连接、连接信息回调。
-- `transfer/FileTransferServer.kt`：发送端 TCP 服务，发送文本或文件流。
-- `transfer/FileTransferClient.kt`：接收端 TCP 客户端，校验 token 后保存文件。
-- `transfer/TransferProtocol.kt`：简单传输协议，先发 4 字节 header 长度，再发 JSON header，最后发内容流。
-- `ui/MainActivity.kt`：原生 View UI 和整体流程编排。
+- 补齐 `app/` 模块。
+- 完成 NFC HCE + ReaderMode 握手。
+- 完成 WiFi Direct 自动建连。
+- 完成文本和文件传输。
+- 增加传输进度、速度和失败提示。
+- 增加 SHA-256 完整性校验。
+- 增加前台服务，支持大文件长时间传输。
+- 整理真机兼容性记录。
 
-## 后续可扩展方向
+## License
 
-- 增加手动设备列表，NFC 失败时允许手动选择 WiFi Direct peer。
-- 用 Foreground Service 承载长文件传输，避免切后台被杀。
-- 使用 MediaStore 保存到公开 Downloads。
-- 加入 SHA-256 校验，接收完成后校验完整性。
-- 支持多文件批量传输和断点续传。
-- 增加蓝牙辅助发现，但仍保持 WiFi Direct 传输主链路。
-
-## GitHub README 建议
-
-上传 GitHub 时建议补充：
-
-- 两台测试手机型号、Android 版本、是否需要手动确认 WiFi Direct 配对。
-- NFC 触碰成功率和推荐贴近位置。
-- 已知问题列表。
-- 演示截图或录屏。
-- 架构图：NFC 只传握手参数，WiFi Direct/TCP 传真实内容。
+个人学习项目，License 待定。
