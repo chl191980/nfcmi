@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NfcWifiDirectShare"
+rootProject.name = "nfcmi"
 include(":app")
